@@ -25,6 +25,12 @@
         android:summary="@string/gaming_mode_summary"
         android:defaultValue="false" />
 
+    <com.havoc.support.preferences.SecureSettingSwitchPreference
+        android:key="window_ignore_secure"
+        android:title="@string/laboratory_ignore_window_secure_title"
+        android:summary="@string/laboratory_ignore_window_secure_summary"
+        android:defaultValue="false" />
+
     <com.havoc.support.preferences.SystemSettingListPreference
         android:key="click_partial_screenshot"
         android:title="@string/screenshot_type_title"
