@@ -23,6 +23,11 @@ import android.os.Bundle;
 import android.os.SystemProperties;
 import android.provider.Settings;
 
+import android.net.Uri;
+import android.os.Handler;
+import android.util.Log;
+import android.widget.Toast;
+
 import androidx.preference.Preference;
 
 import com.android.internal.logging.nano.MetricsProto; 
@@ -32,21 +37,34 @@ import com.android.settings.SettingsPreferenceFragment;
 
 import com.havoc.support.preferences.SystemSettingMasterSwitchPreference;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
+
 public class Misc extends SettingsPreferenceFragment implements
         Preference.OnPreferenceChangeListener {
 
     public static final String TAG = "Misc";
 
     private static final String GAMING_MODE_ENABLED = "gaming_mode_enabled";
+    private static final String KEY_PIF_JSON_FILE_PREFERENCE = "pif_json_file_preference";
 
     private SystemSettingMasterSwitchPreference mGamingMode;
+    private Preference mPifJsonFilePreference;
+
+    private Handler mHandler;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mHandler = new Handler();
         addPreferencesFromResource(R.xml.config_center_misc);
 
         updateMasterPrefs();
+        mPifJsonFilePreference = findPreference(KEY_PIF_JSON_FILE_PREFERENCE);
     }
 
     private void updateMasterPrefs() {
@@ -56,6 +74,53 @@ public class Misc extends SettingsPreferenceFragment implements
         mGamingMode.setOnPreferenceChangeListener(this);
     }
 
+    @Override
+    public boolean onPreferenceTreeClick(Preference preference) {
+        if (preference == mPifJsonFilePreference) {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("application/json");
+            startActivityForResult(intent, 10001);
+            return true;
+        }
+        return super.onPreferenceTreeClick(preference);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 10001 && resultCode == Activity.RESULT_OK) {
+            Uri uri = data.getData();
+            Log.d(TAG, "URI received: " + uri.toString());
+            try (InputStream inputStream = getActivity().getContentResolver().openInputStream(uri)) {
+                if (inputStream != null) {
+                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((length = inputStream.read(buffer)) != -1) {
+                        byteArrayOutputStream.write(buffer, 0, length);
+                    }
+                    String json = new String(byteArrayOutputStream.toByteArray(), StandardCharsets.UTF_8);
+
+                    Log.d(TAG, "JSON data: " + json);
+                    JSONObject jsonObject = new JSONObject(json);
+                    for (Iterator<String> it = jsonObject.keys(); it.hasNext(); ) {
+                        String key = it.next();
+                        String value = jsonObject.getString(key);
+                        Log.d(TAG, "Setting property: persist.sys.pihooks_" + key + " = " + value);
+                        SystemProperties.set("persist.sys.pihooks_" + key, value);
+                    }
+                    Toast.makeText(
+                        getContext(),
+                        getContext().getResources().getString(R.string.pif_json_select_success),
+                        Toast.LENGTH_LONG
+                    ).show();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error reading JSON or setting properties", e);
+            }
+        }
+    }
+    
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
 		if (preference == mGamingMode) {
